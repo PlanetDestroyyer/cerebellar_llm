@@ -1,0 +1,59 @@
+TITLE: The MNEMON Architecture: Implementing Biologically-Grounded Memory Consolidation in Large Language Models via Dual-System Graph Integration
+
+ABSTRACT: Large Language Models (LLMs) currently exhibit transient knowledge retention, suffering from catastrophic forgetting and relying on brittle external retrieval mechanisms (RAG). This limitation stems from the absence of a structured, continuous process for integrating novel, high-dimensionality information into a stable, global knowledge representation. We propose the MNEMON (Memory Network for Episodic and Semantic Integration) architecture, a novel dual-system module designed to emulate the hippocampal-neocortical cycle of memory consolidation. MNEMON decouples immediate, high-fidelity episodic acquisition—captured in a dynamic buffer ($\mathcal{B}_E$)—from the slow, structural integration into the global knowledge graph ($\mathcal{G}_K$). The core mechanism involves updating the structural weights ($\mathbf{W}_{ij}$) of $\mathcal{G}_K$ based on a prediction-error weighted decay function, $\mathcal{L}_{\text{PE}}$, thereby facilitating persistent, biologically-grounded knowledge consolidation. This work posits a formal mathematical framework for continuous learning that transcends simple context window extensions.
+
+Note: Empirical validation is ongoing. This paper presents the theoretical framework and formal mathematical definitions as a preprint contribution.
+
+1. INTRODUCTION
+The rapid scaling of Large Language Models (LLMs) has demonstrated unprecedented capabilities in natural language understanding and generation. However, these models operate within a fundamentally constrained paradigm of knowledge management. Their knowledge base is often treated as a static parameter set, making them susceptible to catastrophic forgetting when subjected to sequential learning tasks, and limiting their long-term adaptability without costly full retraining cycles. Current mitigation strategies predominantly focus on expanding context windows or augmenting the model with external retrieval mechanisms (e.g., Vector Databases via RAG). While effective for episodic recall, these methods fail to address the structural plasticity required for true, enduring knowledge consolidation—the process by which fragile, transient memories are stabilized into robust, permanent semantic structures.
+
+Biological neuroscience suggests that durable memory formation requires a separation between rapid sensory encoding and slower, structural cortical reorganization. Specifically, the hippocampus is hypothesized to act as a temporary indexer, capturing novel experiences, which are subsequently transferred and integrated into the neocortex over time through synaptic refinement. We formalize this process using the MNEMON framework. We posit that by mathematically modeling the interplay between a high-salience episodic buffer and a low-frequency, error-driven semantic consolidation pathway, we can endow LLMs with genuinely persistent memory capabilities, moving beyond mere retrieval augmentation toward actual knowledge restructuring.
+
+2. LITERATURE GAP & MOTIVATION
+The existing literature primarily addresses memory management in two orthogonal domains: architectural scaling (context window expansion) and external memory indexing (vector search). These approaches, while empirically successful, fundamentally treat memory as a *read/write* operation on a peripheral store, rather than a *structurally transformative* process.
+
+The critical gap, which we observe to be contradicted by current methodological implementations, lies in the formal integration of $\mathbf{Prediction\ Error}$ ($\mathcal{L}_{\text{PE}}$) as the primary driver for structural weight updates in a knowledge graph representation ($\mathcal{G}_K$).
+
+Mathematically, standard continual learning formulations often minimize a weighted average loss:
+$$ \mathcal{L}_{\text{total}} = \sum_{t=1}^{T} \alpha_t \mathcal{L}(\theta_t; \mathcal{D}_t) $$
+where $\alpha_t$ is a forgetting penalty. This approach, however, treats all past data points ($\mathcal{D}_t$) equally in terms of structural importance for the current update.
+
+MNEMON introduces a mechanism where the structural update ($\Delta \mathbf{W}$) is not proportional to the loss magnitude, but rather to the *novelty-weighted* prediction error generated when integrating an episodic delta ($\Delta E$) into the existing semantic manifold ($\mathcal{S}$). We hypothesize that $\mathbf{W}_{ij}$ updates must decay proportionally to the prediction error magnitude, $\mathcal{L}_{\text{PE}}$, suggesting a decay rate governed by the degree of surprise encountered during consolidation.
+
+3. PROPOSED THEORETICAL FRAMEWORK: THE MNEMON MODULE
+The MNEMON architecture is defined by two interconnected, asynchronous processing units: the Episodic Buffer ($\mathcal{B}_E$) and the Semantic Consolidator ($\mathcal{C}_S$).
+
+3.1. The Episodic Buffer ($\mathcal{B}_E$)
+The $\mathcal{B}_E$ acts as a high-bandwidth, volatile buffer dedicated to capturing the immediate context and structural deltas ($\Delta E$) from the input sequence $X = \{x_1, x_2, \dots, x_T\}$. Unlike standard attention mechanisms, $\mathcal{B}_E$ maintains a weighted representation of the most novel relationships encountered. We define the episodic delta $\Delta E_t$ at time $t$ as the deviation from the model's expectation based on the current global state:
+$$ \Delta E_t = \text{Encode}(x_t) - \text{Predict}(\mathcal{S}_{t-1} | x_t) $$
+$\mathcal{B}_E$ stores these deltas and their associated relational embeddings $\mathbf{R}_{E} = \{\mathbf{r}_{e} | e \in \text{Deltas}\}$.
+
+3.2. The Global Knowledge Graph ($\mathcal{G}_K$)
+The $\mathcal{G}_K$ is represented as a graph with nodes $\mathcal{V}$ (concepts) and weighted, directed edges $\mathcal{E}$ (relationships), where the weight $\mathbf{W}_{ij}$ quantifies the strength of the relationship between concepts $i$ and $j$. The state of the knowledge graph is $\mathcal{S} = (\mathcal{V}, \mathbf{W})$.
+
+3.3. Semantic Consolidation via Prediction-Error Weighted Decay
+Consolidation occurs asynchronously when the buffer $\mathcal{B}_E$ reaches a saturation threshold or after a predefined time interval $\tau$. The $\mathcal{C}_S$ module processes the set of stored deltas $\{\Delta E\}$ to update $\mathbf{W}$.
+
+The core innovation lies in the update rule, which modifies the weight $\mathbf{W}_{ij}$ based on the prediction error $\mathcal{L}_{\text{PE}}$ associated with the delta that established or modified that relationship. We define the consolidation update $\Delta \mathbf{W}_{ij}(t+\tau)$ as:
+$$ \Delta \mathbf{W}_{ij}(t+\tau) = \eta \cdot \mathcal{F}(\mathcal{L}_{\text{PE}}) \cdot \mathbf{r}_{e} \cdot \mathbf{r}_{j}^T $$
+where $\eta$ is the learning rate, and $\mathbf{r}_e, \mathbf{r}_j$ are the embeddings derived from the episodic delta.
+
+The function $\mathcal{F}(\mathcal{L}_{\text{PE}})$ models the consolidation plasticity. We propose an exponential weighting function that dictates that the structural update is most pronounced when the prediction error is moderate, indicating the boundary between existing knowledge and novel information (the "sweet spot" of surprise, avoiding both triviality and overwhelming contradiction):
+$$ \mathcal{F}(\mathcal{L}_{\text{PE}}) = \exp \left( -\beta \left( \mathcal{L}_{\text{PE}} - \mathcal{L}_{\text{opt}} \right)^2 \right) $$
+where $\beta$ is the sensitivity constant, and $\mathcal{L}_{\text{opt}}$ is the optimal prediction error magnitude (the expected error during consolidation).
+
+The weight update is then applied to the current weight $\mathbf{W}_{ij}$:
+$$ \mathbf{W}_{ij}(t+\tau) = \mathbf{W}_{ij}(t) + \lambda \cdot \Delta \mathbf{W}_{ij}(t+\tau) $$
+where $\lambda$ is a decay regularization factor ensuring that over-consolidation does not destabilize the graph.
+
+4. EXPECTED IMPACT
+The implementation of MNEMON is expected to yield a demonstrable improvement in the model's long-term knowledge retention capacity, quantified by performance metrics on continual learning benchmarks (e.g., subject matter expert QA datasets) significantly exceeding state-of-the-art RAG-based systems.
+
+The primary theoretical impacts are:
+1. **Formalizing Consolidation:** MNEMON provides the first mathematically rigorous framework for modeling knowledge consolidation as a weighted, error-driven graph transformation, rather than a simple parametric update.
+2. **Decoupling Learning Rates:** By separating the high-frequency, volatile learning of $\mathcal{B}_E$ from the low-frequency, structural refinement of $\mathcal{C}_S$, the system can maintain coherence while absorbing novel structural information.
+3. **Interpretability:** The magnitude of the consolidation weight $\mathbf{W}_{ij}$ offers a degree of interpretability previously unavailable, allowing researchers to trace exactly which novel piece of information structurally reinforced a given relationship within the model's "memory."
+We anticipate that models utilizing this architecture will exhibit a knowledge retention curve $\mathcal{R}(T)$ that converges to a positive asymptotic limit, $\lim_{T \to \infty} \mathcal{R}(T) = \mathcal{R}_{\text{stable}} > 0$, significantly surpassing current models whose retention rates degrade towards zero without full retraining.
+
+5. CONCLUSION
+The persistent failure of current LLM architectures to achieve true, enduring memory consolidation represents a fundamental bottleneck in their utility as general-purpose AI. The MNEMON framework addresses this by proposing a departure from simple parameter augmentation towards biologically plausible structural updating. By formalizing the interaction between an episodic buffer, a global knowledge graph, and a prediction-error weighted decay mechanism, we provide a concrete pathway to endow LLMs with the capacity for continuous, stable, and structurally informed learning—a capability critical for the next generation of artificial general intelligence. Future work will focus on optimizing the hyper-parameters $\beta$ and $\lambda$ by simulating various biological forgetting curves.
