@@ -1,77 +1,88 @@
-"""Visualization for cerebellar LLM experiment."""
-import matplotlib.pyplot as plt
+"""Plots for GemmaCerebellar SLM comparison."""
+from __future__ import annotations
+
+import json
 import numpy as np
+import matplotlib.pyplot as plt
 from pathlib import Path
 
 
-def plot_training_comparison(histories: dict, output_dir: Path) -> None:
-    fig, axes = plt.subplots(1, 2, figsize=(13, 5))
+def plot_comparison(results: list[dict], out_dir: Path) -> None:
+    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+    fig.suptitle("GemmaCerebellar SLM — WikiText-103 Comparison\n"
+                 "(100M params, RTX 4050, SOTA 2025-2026 architecture)",
+                 fontsize=11, fontweight="bold")
 
+    names  = [r["run_name"] for r in results]
+    colors = ["#3498db", "#2ecc71", "#e74c3c", "#9b59b6"][:len(results)]
+
+    # Panel 1: Val vs OOD perplexity
     ax = axes[0]
-    if "base_loss" in histories.get("cerebellar", {}):
-        ax.plot(histories["cerebellar"]["base_loss"], "r--", label="Base LM (frozen)", linewidth=2)
-        ax.plot(histories["cerebellar"]["corrected_loss"], "g-", label="+ Cerebellar correction", linewidth=2)
-    if "loss" in histories.get("baseline", {}):
-        ax.plot(histories["baseline"]["loss"], "b-", label="Baseline (no cerebellum)", linewidth=2, alpha=0.7)
-    ax.set_xlabel("Epoch")
-    ax.set_ylabel("Cross-entropy Loss")
-    ax.set_title("Training Loss: Cerebellar Correction vs Baseline")
-    ax.legend()
-    ax.grid(True, alpha=0.3)
+    x  = np.arange(len(names))
+    w  = 0.35
+    val_ppls = [r["val_ppl"]  for r in results]
+    ood_ppls = [r["ood_ppl"]  for r in results]
+    ax.bar(x - w/2, val_ppls, w, label="Val PPL",  color="#3498db", alpha=0.8)
+    ax.bar(x + w/2, ood_ppls, w, label="OOD PPL",  color="#e74c3c", alpha=0.8)
+    ax.set_xticks(x); ax.set_xticklabels(names, rotation=15)
+    ax.set_ylabel("Perplexity (lower = better)")
+    ax.set_title("Validation vs OOD Perplexity")
+    ax.legend(); ax.grid(True, alpha=0.3, axis="y")
 
-    ax2 = axes[1]
-    if "cerebellum_error" in histories.get("cerebellar", {}):
-        ax2.plot(histories["cerebellar"]["cerebellum_error"], "m-", linewidth=2, label="Climbing-fiber error")
-        ax2.set_ylabel("Mean |Error Signal|")
-        ax2.set_title("Cerebellar Learning: Error Signal (Climbing Fiber)\nDecaying error = cerebellum learned corrections")
-        ax2.set_xlabel("Epoch")
-        ax2.legend()
-        ax2.grid(True, alpha=0.3)
+    # Panel 2: OOD gap (proxy for generalization)
+    ax = axes[1]
+    gaps = [r["ood_gap"] for r in results]
+    bars = ax.bar(names, gaps, color=colors, alpha=0.8, width=0.5)
+    for bar, val in zip(bars, gaps):
+        ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.1,
+                f"{val:.2f}", ha="center", fontsize=9)
+    ax.set_ylabel("OOD PPL − Val PPL (lower = better generalization)")
+    ax.set_title("OOD Generalization Gap\n(cerebellar hypothesis: reduces gap)")
+    ax.grid(True, alpha=0.3, axis="y")
 
-    fig.suptitle(
-        "Hypothesis: LLM adaptation via synaptic plasticity + cerebellar error correction\n"
-        "surpasses pure gradient descent for OOD generalization",
-        fontsize=10
-    )
-    fig.tight_layout()
-    out = output_dir / "training_comparison.png"
+    # Panel 3: Test perplexity
+    ax = axes[2]
+    test_ppls = [r["test_ppl"] for r in results]
+    bars = ax.bar(names, test_ppls, color=colors, alpha=0.8, width=0.5)
+    for bar, val in zip(bars, test_ppls):
+        ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.1,
+                f"{val:.2f}", ha="center", fontsize=9)
+    ax.set_ylabel("Test Perplexity")
+    ax.set_title("WikiText-103 Test Perplexity\n(standard benchmark)")
+    ax.grid(True, alpha=0.3, axis="y")
+
+    plt.tight_layout()
+    out = out_dir / "comparison.png"
     fig.savefig(out, dpi=150, bbox_inches="tight")
-    print(f"Training comparison: {out}")
     plt.close(fig)
+    print(f"Saved: {out}")
 
 
-def plot_ood_comparison(eval_results: dict, output_dir: Path) -> None:
-    conditions = ["ID (in-dist)", "OOD (out-of-dist)"]
-    models = list(eval_results.keys())
-    colors = ["#3498db", "#e74c3c", "#2ecc71", "#9b59b6"]
+def plot_training_curves(history_files: list[Path], out_dir: Path) -> None:
+    fig, axes = plt.subplots(1, 2, figsize=(13, 5))
+    colors = ["#3498db", "#2ecc71", "#e74c3c", "#9b59b6"]
 
-    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
-    metrics = ["perplexity", "accuracy"]
-    ylabels = ["Perplexity (lower=better)", "Accuracy (higher=better)"]
+    for i, path in enumerate(history_files):
+        with open(path) as f:
+            data = json.load(f)
+        hist = data.get("history", {})
+        name = data.get("run_name", path.stem)
+        c    = colors[i % len(colors)]
 
-    for ax, metric, ylabel in zip(axes, metrics, ylabels):
-        x = np.arange(len(conditions))
-        width = 0.8 / len(models)
-        for i, (model_name, color) in enumerate(zip(models, colors)):
-            vals = [eval_results[model_name].get(split, {}).get(metric, 0)
-                    for split in ["id", "ood"]]
-            offset = (i - len(models) / 2 + 0.5) * width
-            bars = ax.bar(x + offset, vals, width, label=model_name, color=color, alpha=0.8)
+        if "step" in hist and "train_loss" in hist:
+            axes[0].plot(hist["step"], hist["train_loss"], color=c, label=name, alpha=0.8)
+        if "val_ppl" in hist:
+            n = len(hist["val_ppl"])
+            steps = list(range(0, n * 1000, 1000))[:n]
+            axes[1].plot(steps, hist["val_ppl"], color=c, label=name, linewidth=2)
 
-        ax.set_xticks(x)
-        ax.set_xticklabels(conditions)
-        ax.set_ylabel(ylabel)
-        ax.set_title(f"{ylabel} by Condition")
-        ax.legend(fontsize=8)
-        ax.grid(True, alpha=0.3, axis="y")
+    axes[0].set_xlabel("Step"); axes[0].set_ylabel("Train Loss")
+    axes[0].set_title("Training Loss"); axes[0].legend(); axes[0].grid(True, alpha=0.3)
+    axes[1].set_xlabel("Step"); axes[1].set_ylabel("Validation Perplexity")
+    axes[1].set_title("Validation PPL"); axes[1].legend(); axes[1].grid(True, alpha=0.3)
 
-    fig.suptitle(
-        "OOD Generalization: Cerebellar Error Correction vs Baselines\n"
-        "Key metric: OOD perplexity gap (smaller gap = better generalization)",
-        fontsize=10
-    )
-    fig.tight_layout()
-    out = output_dir / "ood_comparison.png"
+    plt.tight_layout()
+    out = out_dir / "training_curves.png"
     fig.savefig(out, dpi=150, bbox_inches="tight")
-    print(f"OOD comparison: {out}")
     plt.close(fig)
+    print(f"Saved: {out}")
