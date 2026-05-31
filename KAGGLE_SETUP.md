@@ -1,42 +1,55 @@
-## Kaggle Setup (uv everywhere)
+## Kaggle Setup
 
 ### 1. Install uv
 ```bash
 !curl -LsSf https://astral.sh/uv/install.sh | sh
-!source $HOME/.cargo/env
+!source $HOME/.local/bin/env
 ```
 
-### 2. Quick smoke test (verify code works, ~5 min)
+### 2. Smoke test (~10 min)
 ```bash
 !uv run python main.py --quick
 ```
 
-### 3. Full experiment (WikiText-103, ~3-6 hrs on A100)
+### 3. Full experiment (~3-6 hrs on A100)
 ```bash
-!uv run python main.py --steps 50000 --batch 16 --seq_len 1024 --grad_accum 4
+# Phase 1+2: Train GemmaSLM baseline + microglia, attach cerebellar
+!uv run python main.py --phase train --steps 50000 --batch 16
+
+# Phase 3: PPL eval on WikiText-103 test + OOD
+!uv run python main.py --phase eval
+
+# Phase 4: Generation eval (ID/OOD/stress prompts + error recovery viz)
+!uv run python main.py --phase gen
+
+# Phase 5: HF baseline comparison (SmolLM/Qwen eval only)
+!uv run python main.py --phase hf
 ```
 
-### 4. Single runs
+### 4. Standard benchmarks (MMLU / HellaSwag / ARC / TruthfulQA)
 ```bash
-!uv run python main.py --run baseline   --steps 50000 --batch 16
-!uv run python main.py --run cerebellar --steps 50000 --batch 16
-!uv run python main.py --run microglia  --steps 50000 --batch 16
+# Our trained models
+!uv run python benchmark.py --benchmarks mmlu hellaswag arc truthfulqa
+
+# Quick test (100 samples each)
+!uv run python benchmark.py --quick
+
+# Also benchmark HF baselines
+!uv run python benchmark.py \
+  --models HuggingFaceTB/SmolLM2-135M Qwen/Qwen2.5-0.5B Qwen/Qwen3.5-0.8B \
+  --benchmarks mmlu hellaswag arc truthfulqa
 ```
 
-### 5. With WandB logging
-```bash
-!uv run python main.py --steps 50000 --batch 16 --wandb
-```
+### Results in results/
+- our_models/{baseline,cerebellar,microglia}/   training checkpoints + PPL
+- generation/   side-by-side text + error_recovery.png + generation_quality.png
+- benchmarks/   MMLU/HellaSwag/ARC scores + benchmark_results.png
+- all_results.json, comparison.png
 
-### Expected results (A100, ~4 hrs):
-- Baseline val PPL: ~25-35 (WikiText-103 standard)
-- Cerebellar OOD gap: hypothesis — lower than baseline
-- Microglia OOD gap: hypothesis — lower than magnitude pruning
-
-### Files produced in results/:
-- all_results.json
-- comparison.png
-- training_curves.png
-- baseline/results_baseline.json
-- cerebellar/results_cerebellar.json
-- microglia/results_microglia.json
+### Published reference scores (for paper table)
+| Model          | MMLU  | HellaSwag | ARC   |
+|----------------|-------|-----------|-------|
+| SmolLM-135M    | 26.5  | 44.4      | 33.9  |
+| SmolLM2-135M   | 27.2  | 45.1      | 35.1  |
+| Qwen2.5-0.5B   | 47.4  | 52.8      | 36.1  |
+| Qwen3.5-0.8B   | 55.2  | 58.0      | 43.0  |

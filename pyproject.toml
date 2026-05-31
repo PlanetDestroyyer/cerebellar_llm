@@ -1,7 +1,7 @@
 [project]
-name = "gemma-cerebellar-slm"
+name = "cerebellar-llm"
 version = "0.1.0"
-description = "100M SLM with Gemma3/Qwen3 SOTA arch + cerebellar error correction + microglia pruning"
+description = "Cerebellar error correction + microglia pruning for SLMs — WikiText-103 + MMLU/HellaSwag/ARC benchmarks"
 requires-python = ">=3.11"
 dependencies = [
     "torch>=2.3",
@@ -13,4 +13,5 @@ dependencies = [
     "tqdm>=4.66",
     "wandb>=0.17",
     "scipy>=1.11",
+    "accelerate>=0.30",
 ]
